@@ -3,6 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
+RNA_ref = pd.read_csv('Data/RNA_reference.csv') # read only once.
+#read in gene length information
+genes = pd.read_csv('Data/sacCer3 genes.csv')
+
 def find_poly_peaks(trace, run_length=4, exclude_beginning=0.1):
     #read out some basic trace parameters
     trace_x_max = max(trace['x'])
@@ -68,10 +72,6 @@ def find_poly_peaks(trace, run_length=4, exclude_beginning=0.1):
                     peakxs.append((pos_end_x + match_neg_start_x)/2)
     return peakxs
 
-
-
-
-
 def plot_trace(trace, peakxlocs=[], add_x=0, predxlocs=[]):
     _, ax = plt.subplots()
     ax.scatter(trace['x'], trace['y'], c='black', s=2)
@@ -118,7 +118,8 @@ def fp2poly(df, df_columns=['ORF', 'Ribo_Prints', 'RNA_Prints'], RNA_content=600
     #####assemble a processible dataset
 
     #check whether sepcified columns exist
-    if all(elem in df.columns  for elem in df_columns):
+    # if all(elem in df.columns  for elem in df_columns):
+    if set(df_columns).issubset(df.columns):
         dats = df[df_columns]
     else:
         print('Specified columns do not exist in data frame. Available columns include: \n' +
@@ -129,7 +130,6 @@ def fp2poly(df, df_columns=['ORF', 'Ribo_Prints', 'RNA_Prints'], RNA_content=600
     #check whether correct number of columns was given, add reference RNA-Seq data if required
     if len(dats.columns) == 2:
         dats.columns = ['ORF', 'Ribo_Prints']
-        RNA_ref = pd.read_csv('Data/RNA_reference.csv')
         dats = dats.merge(RNA_ref, how='inner', on='ORF')
         print('No mRNA data specified, using reference RNA-Seq data.')
     elif len(df_columns) == 3:
@@ -141,13 +141,12 @@ def fp2poly(df, df_columns=['ORF', 'Ribo_Prints', 'RNA_Prints'], RNA_content=600
 
     #remove rows where either the RNA prints or Ribo prints are 0
     # (these do not contribute information to the profile)
-    dats = dats.loc[dats['RNA_Prints'] > 0]
-    dats = dats.loc[dats['Ribo_Prints'] > 0]
+    dats = dats.loc[(dats['RNA_Prints'] > 0) & (dats['Ribo_Prints'] > 0)]
+    # dats = dats.loc[dats['Ribo_Prints'] > 0]
 
     ######convert Ribo-Seq reads to RPKM
 
-    #read in gene length information
-    genes = pd.read_csv('Data/sacCer3 genes.csv')
+
     #combine input dataset with gene length information
     dats = dats.merge(genes[['name', 'length']],
                       how='inner', left_on='ORF', right_on='name')[
@@ -184,9 +183,9 @@ def fp2poly(df, df_columns=['ORF', 'Ribo_Prints', 'RNA_Prints'], RNA_content=600
         poly_array[1] += idle_ribos * frac_split * 0.66
         poly_array[2] += idle_ribos * (1-frac_split)
     #go through each row of dats and add ribosomes to the appropriate peak
-    for row in range(dats.shape[0]):
-        this_RperR = dats.iloc[row]['RperR']
-        these_Ribos_bound = dats.iloc[row]['Ribos_bound']
+    for _, row in dats.iterrows():
+        this_RperR = row['RperR']
+        these_Ribos_bound = row['Ribos_bound']
         #if the number of ribos per RNA is an exact number,
         # assign the ribos to the corrresponding peak
         floor_val = int(this_RperR)
@@ -356,5 +355,4 @@ def compare_profiles(dats1, dats2, dats1_columns=['ORF', 'RNA_Prints', 'Ribo_Pri
     else:
         return fig, fig.axes
 
-if __name__ == "__main__":
-    print(fp2poly(pd.read_csv('Data/GSE59573.csv', index_col=False)))
+
